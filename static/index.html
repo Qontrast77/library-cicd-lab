@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Library Management System</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <h1>📚 Библиотека — панель управления</h1>
+
+  <div class="grid">
+    <section>
+      <h2>Авторы</h2>
+      <form id="author-form">
+        <input name="full_name" placeholder="ФИО автора" required>
+        <input name="country" placeholder="Страна">
+        <button type="submit">Добавить</button>
+      </form>
+      <ul id="author-list"></ul>
+    </section>
+
+    <section>
+      <h2>Книги</h2>
+      <form id="book-form">
+        <input name="title" placeholder="Название" required>
+        <input name="year" placeholder="Год" type="number">
+        <input name="copies_total" placeholder="Экземпляров" type="number" value="1">
+        <input name="author_id" placeholder="ID автора" type="number" required>
+        <button type="submit">Добавить</button>
+      </form>
+      <ul id="book-list"></ul>
+    </section>
+
+    <section>
+      <h2>Читатели</h2>
+      <form id="member-form">
+        <input name="full_name" placeholder="ФИО" required>
+        <input name="email" placeholder="Email" required>
+        <button type="submit">Добавить</button>
+      </form>
+      <ul id="member-list"></ul>
+    </section>
+
+    <section>
+      <h2>Выдачи</h2>
+      <form id="loan-form">
+        <input name="book_id" placeholder="ID книги" type="number" required>
+        <input name="member_id" placeholder="ID читателя" type="number" required>
+        <button type="submit">Выдать</button>
+      </form>
+      <ul id="loan-list"></ul>
+    </section>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
