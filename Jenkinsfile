@@ -3,8 +3,9 @@
 //  - встроенный блок post{} удобен для отчётов о тестах и уведомлений;
 //  - меньше кода, достаточно гибкости для наших нужд (build+test [+deploy]).
 //
-// Без Docker: приложение собирается и запускается прямо на агенте Jenkins
-// через virtualenv + gunicorn.
+// Без Docker, для Windows-агента: сборка и запуск идут прямо на машине,
+// где крутится Jenkins, через virtualenv + waitress (WSGI-сервер для
+// Windows — gunicorn на Windows не запускается, это Unix-only).
 pipeline {
     agent any
 
@@ -14,9 +15,10 @@ pipeline {
     }
 
     environment {
-        VENV = "venv"
-        APP_PORT = "5000"
-        PID_FILE = "app.pid"
+        // Полный путь к python.exe — не полагаемся на системный PATH,
+        // так как служба Jenkins на Windows часто его не наследует.
+        PYTHON = 'C:\\Users\\Qontrast77\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
+        APP_PORT = '5000'
     }
 
     stages {
@@ -24,16 +26,16 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                sh 'echo "Branch: $BRANCH_NAME" || true'
+                bat 'echo Branch: %BRANCH_NAME%'
             }
         }
 
         stage('Setup') {
             steps {
-                sh '''
-                    python3 -m venv ${VENV}
-                    . ${VENV}/bin/activate
-                    pip install --upgrade pip
+                bat '''
+                    "%PYTHON%" -m venv venv
+                    call venv\\Scripts\\activate.bat
+                    python -m pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
             }
@@ -41,9 +43,9 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh '''
-                    . ${VENV}/bin/activate
-                    mkdir -p reports
+                bat '''
+                    call venv\\Scripts\\activate.bat
+                    if not exist reports mkdir reports
                     pytest tests/ --junitxml=reports/results.xml
                 '''
             }
@@ -56,22 +58,21 @@ pipeline {
 
         stage('Deploy') {
             // CD-стадия: выполняется только при пуше в main (production).
-            // Останавливаем старый процесс (если есть) и запускаем новый
-            // через gunicorn в фоне, PID сохраняем в файл для следующей остановки.
+            // Старый процесс waitress останавливается по имени образа,
+            // новый запускается в фоне через schtasks (чтобы Jenkins не
+            // прибил процесс сразу после завершения стадии — при обычном
+            // "start /B" Jenkins по умолчанию убивает всё дерево процессов
+            // шага, как только тот завершится).
             when {
                 branch 'main'
             }
             steps {
-                sh '''
-                    . ${VENV}/bin/activate
-                    if [ -f ${PID_FILE} ] && kill -0 $(cat ${PID_FILE}) 2>/dev/null; then
-                        kill $(cat ${PID_FILE})
-                        sleep 2
-                    fi
-                    nohup gunicorn -b 0.0.0.0:${APP_PORT} app:app > gunicorn.log 2>&1 &
-                    echo $! > ${PID_FILE}
-                    sleep 2
-                    curl -sf http://localhost:${APP_PORT}/api/health
+                bat '''
+                    taskkill /F /IM waitress-serve.exe /T 2>nul
+                    schtasks /Create /TN LibraryAppDeploy /TR "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app" /SC ONCE /ST 00:00 /F
+                    schtasks /Run /TN LibraryAppDeploy
+                    timeout /t 3 /nobreak
+                    curl -sf http://localhost:%APP_PORT%/api/health
                 '''
             }
         }

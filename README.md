@@ -18,20 +18,31 @@ library-app/
 ```
 
 > Вариант без Docker: сборка и запуск идут напрямую на агенте Jenkins —
-> virtualenv + `gunicorn`. Ничего контейнеризировать не нужно.
+> virtualenv + `waitress` (WSGI-сервер, работающий на Windows; `gunicorn`
+> для Windows не подходит, это Unix-only библиотека). Ничего
+> контейнеризировать не нужно.
 
 ## 1. Локальный запуск
 
-```bash
+Windows / PowerShell:
+```powershell
 python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python app.py                 # http://localhost:5000
 ```
 
+Linux / macOS:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
 Тесты:
 
-```bash
+```
 pytest tests/ -v
 ```
 
@@ -163,19 +174,32 @@ Jenkins запустится как служба на `http://localhost:8080`.
 ## 5. Как устроен pipeline (`Jenkinsfile`)
 
 Declarative Pipeline (выбран за читаемость и удобный `post{}`-блок для
-публикации отчётов о тестах) с тремя стадиями, без Docker:
+публикации отчётов о тестах) с тремя стадиями, без Docker.
+Все шаги — через `bat` (Windows batch), так как Jenkins-агент на Windows.
 
 | Стадия    | Что делает                                                             | Когда выполняется |
 |-----------|--------------------------------------------------------------------------|--------------------|
 | Checkout  | Забирает код текущей ветки                                               | всегда |
-| Setup     | Создаёт venv, ставит зависимости из `requirements.txt`                   | всегда |
+| Setup     | Создаёт venv (через полный путь к `python.exe`), ставит зависимости      | всегда |
 | Test      | Прогоняет `pytest`, публикует JUnit-отчёт (`junit` step)                  | всегда — это стадия **CI** |
-| Deploy    | Останавливает старый процесс gunicorn (по PID-файлу) и запускает новый, затем проверяет `/api/health` | только `main` — это стадия **CD** |
+| Deploy    | Останавливает старый `waitress-serve.exe`, запускает новый через `schtasks`, проверяет `/api/health` | только `main` — это стадия **CD** |
 
 Таким образом push в `feature/*` и `dev` запускает только CI
 (установка зависимостей + тесты), а push в `main` дополнительно
-выполняет CD — перезапуск приложения через `gunicorn` прямо на
-хосте, где работает Jenkins agent.
+выполняет CD — перезапуск приложения через `waitress` прямо на
+машине, где работает Jenkins.
+
+**Важный нюанс про Windows**: путь к `python.exe` захардкожен в
+`environment { PYTHON = '...' }` в начале `Jenkinsfile`, потому что
+служба Jenkins на Windows не всегда наследует системный PATH. Если
+запускаешь проект на другой машине — поменяй этот путь под своего
+пользователя (узнать его: `where.exe python` в обычном PowerShell).
+
+Деплой сделан через `schtasks` (планировщик задач Windows), а не
+через простой `start /B`, — потому что Jenkins по умолчанию убивает
+всё дерево процессов шага сразу после его завершения, и обычный
+фоновый процесс тоже "умер" бы вместе с шагом. Задача в планировщике
+живёт независимо от Jenkins.
 
 ---
 
@@ -187,16 +211,22 @@ Declarative Pipeline (выбран за читаемость и удобный `
 2. Смёржить `feature/...` → `dev` — Jenkins прогоняет pipeline для `dev`
    (Checkout/Setup/Test).
 3. Смёржить `dev` → `main` — выполняется стадия Deploy: старый процесс
-   `gunicorn` останавливается, новый запускается; приложение обновляется
-   на `http://<host>:5000`.
+   `waitress-serve.exe` останавливается, новый запускается через
+   `schtasks`; приложение обновляется на `http://localhost:5000`.
 4. В интерфейсе Jenkins открыть билд → "Test Result" — видно количество
    пройденных/упавших тестов (JUnit-отчёт из стадии Test).
+5. Проверить руками, что задача в планировщике реально создана и
+   выполнена:
+   ```powershell
+   schtasks /Query /TN LibraryAppDeploy
+   ```
 
 ---
 
-## 7. Как альтернативно оформить Deploy (без ручного gunicorn+PID)
+## 7. Как альтернативно оформить Deploy (только для Linux-хостов)
 
-Если на сервере уже настроен systemd-юнит для приложения (создаётся один раз
+Если Jenkins/приложение крутятся не на Windows, а на Linux-сервере,
+и там уже настроен systemd-юнит для приложения (создаётся один раз
 вручную, не через Jenkins), стадию `Deploy` можно упростить до:
 
 ```groovy
