@@ -2,6 +2,9 @@
 //  - структура стадий читается сразу (проще для отчёта/поддержки);
 //  - встроенный блок post{} удобен для отчётов о тестах и уведомлений;
 //  - меньше кода, достаточно гибкости для наших нужд (build+test [+deploy]).
+//
+// Без Docker: приложение собирается и запускается прямо на агенте Jenkins
+// через virtualenv + gunicorn.
 pipeline {
     agent any
 
@@ -12,7 +15,8 @@ pipeline {
 
     environment {
         VENV = "venv"
-        IMAGE_NAME = "library-app"
+        APP_PORT = "5000"
+        PID_FILE = "app.pid"
     }
 
     stages {
@@ -50,27 +54,24 @@ pipeline {
             }
         }
 
-        stage('Build image') {
-            when {
-                // сборка образа — только для main/dev, чтобы feature-ветки
-                // не гоняли лишний Docker build
-                anyOf { branch 'main'; branch 'dev' }
-            }
-            steps {
-                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
-            }
-        }
-
         stage('Deploy') {
-            // CD-стадия: выполняется только при пуше в main (production)
+            // CD-стадия: выполняется только при пуше в main (production).
+            // Останавливаем старый процесс (если есть) и запускаем новый
+            // через gunicorn в фоне, PID сохраняем в файл для следующей остановки.
             when {
                 branch 'main'
             }
             steps {
                 sh '''
-                    docker stop ${IMAGE_NAME} || true
-                    docker rm ${IMAGE_NAME} || true
-                    docker run -d --name ${IMAGE_NAME} -p 5000:5000 ${IMAGE_NAME}:${BUILD_NUMBER}
+                    . ${VENV}/bin/activate
+                    if [ -f ${PID_FILE} ] && kill -0 $(cat ${PID_FILE}) 2>/dev/null; then
+                        kill $(cat ${PID_FILE})
+                        sleep 2
+                    fi
+                    nohup gunicorn -b 0.0.0.0:${APP_PORT} app:app > gunicorn.log 2>&1 &
+                    echo $! > ${PID_FILE}
+                    sleep 2
+                    curl -sf http://localhost:${APP_PORT}/api/health
                 '''
             }
         }

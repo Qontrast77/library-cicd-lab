@@ -11,12 +11,14 @@ library-app/
 ├── app.py              # Flask-приложение, все роуты
 ├── db.py                # доступ к SQLite (без ORM)
 ├── requirements.txt
-├── Dockerfile
-├── Jenkinsfile          # pipeline CI/CD
+├── Jenkinsfile          # pipeline CI/CD (без Docker)
 ├── static/              # фронтенд (index.html, script.js, style.css)
 └── tests/
     └── test_api.py      # автотесты (unittest, запускаются через pytest)
 ```
+
+> Вариант без Docker: сборка и запуск идут напрямую на агенте Jenkins —
+> virtualenv + `gunicorn`. Ничего контейнеризировать не нужно.
 
 ## 1. Локальный запуск
 
@@ -120,7 +122,11 @@ Jenkins запустится как служба на `http://localhost:8080`.
    - **Git plugin** (обычно уже есть)
    - **GitHub Integration / GitHub Branch Source**
    - **Pipeline**
-   - **Docker Pipeline** (если деплой через Docker)
+
+   Docker не используется — все стадии выполняются в обычном virtualenv,
+   поэтому на агенте Jenkins достаточно установленных `python3` и `pip`
+   (Manage Jenkins → Tools, либо просто убедиться, что `python3` есть в PATH
+   на машине, где работает Jenkins agent).
 
 ---
 
@@ -157,18 +163,19 @@ Jenkins запустится как служба на `http://localhost:8080`.
 ## 5. Как устроен pipeline (`Jenkinsfile`)
 
 Declarative Pipeline (выбран за читаемость и удобный `post{}`-блок для
-публикации отчётов о тестах) с четырьмя стадиями:
+публикации отчётов о тестах) с тремя стадиями, без Docker:
 
-| Стадия       | Что делает                                                  | Когда выполняется |
-|--------------|--------------------------------------------------------------|--------------------|
-| Checkout     | Забирает код текущей ветки                                    | всегда |
-| Setup        | Создаёт venv, ставит зависимости из `requirements.txt`        | всегда |
-| Test         | Прогоняет `pytest`, публикует JUnit-отчёт (`junit` step)       | всегда — это стадия **CI** |
-| Build image  | `docker build` образа приложения                              | только `main`, `dev` |
-| Deploy       | Останавливает старый контейнер и поднимает новый               | только `main` — это стадия **CD** |
+| Стадия    | Что делает                                                             | Когда выполняется |
+|-----------|--------------------------------------------------------------------------|--------------------|
+| Checkout  | Забирает код текущей ветки                                               | всегда |
+| Setup     | Создаёт venv, ставит зависимости из `requirements.txt`                   | всегда |
+| Test      | Прогоняет `pytest`, публикует JUnit-отчёт (`junit` step)                  | всегда — это стадия **CI** |
+| Deploy    | Останавливает старый процесс gunicorn (по PID-файлу) и запускает новый, затем проверяет `/api/health` | только `main` — это стадия **CD** |
 
-Таким образом push в `feature/*` запускает только CI (сборка+тесты),
-а push в `main` дополнительно выполняет CD (сборка образа и деплой).
+Таким образом push в `feature/*` и `dev` запускает только CI
+(установка зависимостей + тесты), а push в `main` дополнительно
+выполняет CD — перезапуск приложения через `gunicorn` прямо на
+хосте, где работает Jenkins agent.
 
 ---
 
@@ -178,18 +185,49 @@ Declarative Pipeline (выбран за читаемость и удобный `
    в Jenkins автоматически появляется новый билд этой ветки, выполняются
    стадии Checkout/Setup/Test.
 2. Смёржить `feature/...` → `dev` — Jenkins прогоняет pipeline для `dev`
-   (плюс сборку Docker-образа).
-3. Смёржить `dev` → `main` — выполняются все стадии, включая деплой;
-   приложение обновляется на `http://<host>:5000`.
+   (Checkout/Setup/Test).
+3. Смёржить `dev` → `main` — выполняется стадия Deploy: старый процесс
+   `gunicorn` останавливается, новый запускается; приложение обновляется
+   на `http://<host>:5000`.
 4. В интерфейсе Jenkins открыть билд → "Test Result" — видно количество
    пройденных/упавших тестов (JUnit-отчёт из стадии Test).
 
 ---
 
-## 7. Возможные доработки
+## 7. Как альтернативно оформить Deploy (без ручного gunicorn+PID)
+
+Если на сервере уже настроен systemd-юнит для приложения (создаётся один раз
+вручную, не через Jenkins), стадию `Deploy` можно упростить до:
+
+```groovy
+stage('Deploy') {
+    when { branch 'main' }
+    steps {
+        sh 'sudo systemctl restart library-app'
+    }
+}
+```
+
+Пример unit-файла `/etc/systemd/system/library-app.service`:
+
+```ini
+[Unit]
+Description=Library Management App
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/library-app
+ExecStart=/opt/library-app/venv/bin/gunicorn -b 0.0.0.0:5000 app:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 8. Возможные доработки
 
 - Добавить стадию `Lint` (flake8/ruff) перед тестами.
-- Добавить staging-окружение: `dev` деплоится на staging-порт,
-  `main` — на production.
-- Push собранного образа в Docker Hub / приватный registry вместо
-  локального `docker run`.
+- Добавить staging-окружение: `dev` деплоится на отдельный порт (staging),
+  `main` — на production-порт.
+- Настроить деплой на удалённый сервер через SSH-плагин Jenkins
+  (Publish Over SSH), если Jenkins и приложение работают на разных машинах.
