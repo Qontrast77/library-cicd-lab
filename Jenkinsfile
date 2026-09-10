@@ -1,11 +1,3 @@
-// Declarative Pipeline выбран вместо Scripted, так как:
-//  - структура стадий читается сразу (проще для отчёта/поддержки);
-//  - встроенный блок post{} удобен для отчётов о тестах и уведомлений;
-//  - меньше кода, достаточно гибкости для наших нужд (build+test [+deploy]).
-//
-// Без Docker, для Windows-агента: сборка и запуск идут прямо на машине,
-// где крутится Jenkins, через virtualenv + waitress (WSGI-сервер для
-// Windows — gunicorn на Windows не запускается, это Unix-only).
 pipeline {
     agent any
 
@@ -63,16 +55,21 @@ pipeline {
             // прибил процесс сразу после завершения стадии — при обычном
             // "start /B" Jenkins по умолчанию убивает всё дерево процессов
             // шага, как только тот завершится).
+            //
+            // Все системные команды вызываются по полному пути
+            // (C:\Windows\System32\...), а не по голому имени — служба
+            // Jenkins на этой машине не видит даже базовые команды Windows
+            // через PATH (та же история, что была с python.exe).
             when {
                 branch 'main'
             }
             steps {
                 bat '''
-                    taskkill /F /IM waitress-serve.exe /T 2>nul
-                    schtasks /Create /TN LibraryAppDeploy /TR "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app" /SC ONCE /ST 00:00 /F
-                    schtasks /Run /TN LibraryAppDeploy
-                    timeout /t 3 /nobreak
-                    curl -sf http://localhost:%APP_PORT%/api/health
+                    "C:\\Windows\\System32\\taskkill.exe" /F /IM waitress-serve.exe /T 2>nul
+                    "C:\\Windows\\System32\\schtasks.exe" /Create /TN LibraryAppDeploy /TR "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app" /SC ONCE /ST 00:00 /F
+                    "C:\\Windows\\System32\\schtasks.exe" /Run /TN LibraryAppDeploy
+                    "C:\\Windows\\System32\\timeout.exe" /t 5 /nobreak
+                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%APP_PORT%/api/health' | Out-Null; Write-Host 'Health check OK' } catch { Write-Host 'Health check FAILED'; exit 1 }"
                 '''
             }
         }
