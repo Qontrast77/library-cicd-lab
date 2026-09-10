@@ -7,8 +7,6 @@ pipeline {
     }
 
     environment {
-        // Полный путь к python.exe — не полагаемся на системный PATH,
-        // так как служба Jenkins на Windows часто его не наследует.
         PYTHON = 'C:\\Users\\Qontrast77\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
         APP_PORT = '5000'
     }
@@ -49,16 +47,32 @@ pipeline {
         }
 
         stage('Deploy') {
-            // CD-стадия: выполняется только при пуше в main (production).
-            // Старый процесс waitress останавливается по имени образа,
-            // новый запускается в фоне через schtasks (чтобы Jenkins не
-            // прибил процесс сразу после завершения стадии — при обычном
-            // "start /B" Jenkins по умолчанию убивает всё дерево процессов
-            // шага, как только тот завершится).
-            //
-            // Все системные команды вызываются по полному пути
-            // (C:\Windows\System32\...), а не по голому имени — служба
-            // Jenkins на этой машине не видит даже базовые команды Windows
-            // через PATH (та же история, что была с python.exe).
-            //
-            // /ST 23:59 — заведомо время в будущем
+            // CD stage: only on main. Stops old waitress process, starts new one via schtasks
+            // (schtasks breaks the process fully away from Jenkins, so it survives after this step ends).
+            // All system commands use full paths because the Jenkins service does not see PATH properly.
+            // ST 23:59 is just "some time later today" - the actual value does not matter since
+            // we run the task immediately with /Run right after creating it.
+            when {
+                branch 'main'
+            }
+            steps {
+                bat '''
+                    "C:\\Windows\\System32\\taskkill.exe" /F /IM waitress-serve.exe /T 2>nul
+                    "C:\\Windows\\System32\\schtasks.exe" /Create /TN LibraryAppDeploy /TR "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app" /SC ONCE /ST 23:59 /F
+                    "C:\\Windows\\System32\\schtasks.exe" /Run /TN LibraryAppDeploy
+                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command "Start-Sleep -Seconds 5"
+                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%APP_PORT%/api/health' | Out-Null; Write-Host 'Health check OK' } catch { Write-Host 'Health check FAILED'; exit 1 }"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline finished OK for branch ${env.BRANCH_NAME}"
+        }
+        failure {
+            echo "Pipeline failed on branch ${env.BRANCH_NAME} - check test report"
+        }
+    }
+}
