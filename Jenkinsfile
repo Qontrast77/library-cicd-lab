@@ -60,27 +60,5 @@ pipeline {
             // (C:\Windows\System32\...), а не по голому имени — служба
             // Jenkins на этой машине не видит даже базовые команды Windows
             // через PATH (та же история, что была с python.exe).
-            when {
-                branch 'main'
-            }
-            steps {
-                bat '''
-                    "C:\\Windows\\System32\\taskkill.exe" /F /IM waitress-serve.exe /T 2>nul
-                    "C:\\Windows\\System32\\schtasks.exe" /Create /TN LibraryAppDeploy /TR "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app" /SC ONCE /ST 00:00 /F
-                    "C:\\Windows\\System32\\schtasks.exe" /Run /TN LibraryAppDeploy
-                    "C:\\Windows\\System32\\timeout.exe" /t 5 /nobreak
-                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%APP_PORT%/api/health' | Out-Null; Write-Host 'Health check OK' } catch { Write-Host 'Health check FAILED'; exit 1 }"
-                '''
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "Pipeline завершён успешно для ветки ${env.BRANCH_NAME}"
-        }
-        failure {
-            echo "Pipeline упал на ветке ${env.BRANCH_NAME} — проверьте отчёт о тестах"
-        }
-    }
-}
+            //
+            // /ST 23:59 — заведомо время в будущем
