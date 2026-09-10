@@ -47,19 +47,19 @@ pipeline {
         }
 
         stage('Deploy') {
-            // CD stage: only on main. Stops old waitress process, starts new one via schtasks
-            // (schtasks breaks the process fully away from Jenkins, so it survives after this step ends).
+            // CD stage: only on main. Stops old waitress process, starts new one via WMIC
+            // process create - this makes the new process a child of the WMI provider host,
+            // fully detached from Jenkins, so it survives after this step ends. Switched away
+            // from schtasks because it needs "Log on as a batch job" rights the Jenkins
+            // service account does not have here.
             // All system commands use full paths because the Jenkins service does not see PATH properly.
-            // ST 23:59 is just "some time later today" - the actual value does not matter since
-            // we run the task immediately with /Run right after creating it.
             when {
                 branch 'main'
             }
             steps {
                 bat '''
                     "C:\\Windows\\System32\\taskkill.exe" /F /IM waitress-serve.exe /T 2>nul
-                    "C:\\Windows\\System32\\schtasks.exe" /Create /TN LibraryAppDeploy /TR "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app" /SC ONCE /ST 23:59 /F
-                    "C:\\Windows\\System32\\schtasks.exe" /Run /TN LibraryAppDeploy
+                    "C:\\Windows\\System32\\wbem\\WMIC.exe" process call create "\\"%WORKSPACE%\\venv\\Scripts\\waitress-serve.exe\\" --host=0.0.0.0 --port=%APP_PORT% app:app"
                     "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command "Start-Sleep -Seconds 5"
                     "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:%APP_PORT%/api/health' | Out-Null; Write-Host 'Health check OK' } catch { Write-Host 'Health check FAILED'; exit 1 }"
                 '''
