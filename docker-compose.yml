@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    container_name: library-app
+    restart: unless-stopped
+    environment:
+      - DB_PATH=/data/library.db
+    volumes:
+      - library-data:/data
+    expose:
+      - "5000"
+
+  nginx:
+    image: nginx:alpine
+    container_name: library-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+
+volumes:
+  library-data:

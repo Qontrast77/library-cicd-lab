@@ -8,6 +8,7 @@ pipeline {
 
     environment {
         PYTHON = 'C:/Users/Qontrast77/AppData/Local/Programs/Python/Python312/python.exe'
+        DOCKER = 'C:/Program Files/Docker/Docker/resources/bin/docker.exe'
         APP_PORT = '5000'
     }
 
@@ -38,7 +39,8 @@ pipeline {
         }
 
         stage('Deploy') {
-            // CD stage: only on main.
+            // CD stage: only on main. Builds the app image and (re)starts
+            // it plus nginx via docker-compose - see scripts/deploy.bat.
             when {
                 branch 'main'
             }
@@ -57,3 +59,4 @@ pipeline {
         }
     }
 }
+
