@@ -19,7 +19,7 @@ pipeline {
         DOCKER = 'C:/Program Files/Docker/Docker/resources/bin/docker.exe'
         APP_PORT = '5000'
         // TODO: replace with your own Docker Hub username/repo
-        IMAGE_NAME = 'YOUR_DOCKERHUB_USERNAME/library-cicd-lab'
+        IMAGE_NAME = 'qontrast77/library-cicd-lab'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         // Required for the Dockerfile's "RUN --mount=type=cache" to work -
         // that syntax needs BuildKit, not the older classic builder.
