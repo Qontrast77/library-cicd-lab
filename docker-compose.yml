@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    image: ${IMAGE_NAME:-library-cicd-lab}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - DB_PATH=/data/library.db
