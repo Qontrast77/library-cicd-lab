@@ -1,0 +1,58 @@
+# Шаблон: __NAME__ и __TAG__ подставляются scripts/deploy.ps1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: __NAME__-service
+  namespace: library
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: __NAME__-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 1, maxSurge: 1}
+  template:
+    metadata:
+      labels:
+        app: __NAME__-service
+    spec:
+      containers:
+        - name: app
+          image: library/__NAME__-service:__TAG__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_NAME, value: __NAME__}
+            - name: DB_USER
+              valueFrom: {secretKeyRef: {name: db-secret, key: POSTGRES_USER}}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: db-secret, key: POSTGRES_PASSWORD}}
+            - {name: AUTHORS_URL, value: "http://authors-service"}
+            - {name: BOOKS_URL,   value: "http://books-service"}
+            - {name: MEMBERS_URL, value: "http://members-service"}
+          readinessProbe:
+            httpGet: {path: /ready, port: 5000}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: 5000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: __NAME__-service
+  namespace: library
+spec:
+  selector:
+    app: __NAME__-service
+  ports:
+    - port: 80
+      targetPort: 5000

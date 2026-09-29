@@ -1,11 +1,7 @@
-// Declarative Pipeline: simple stage structure, post{} block for test reports.
-// Setup/Test run natively via venv (no Docker needed for CI).
-// Build & Push (main only) builds a versioned Docker image and pushes it to
-// Docker Hub - this is the artifact-versioning requirement.
-// Deploy (main only) runs the app as a container behind nginx via
-// docker-compose - see docker-compose.yml.
-// All Windows-specific commands live in scripts/*.bat so this file has no
-// backslash escaping to worry about (forward slashes work fine on Windows).
+// Declarative Pipeline: сборка образов микросервисов, развёртывание в
+// одноузловой Kubernetes (minikube), сквозной smoke-тест через gateway.
+// Требования к Jenkins-агенту: Windows, установлены minikube, kubectl, Docker,
+// кластер запущен (minikube start), у пользователя службы Jenkins доступен kubeconfig.
 pipeline {
     agent any
 
@@ -16,15 +12,9 @@ pipeline {
 
     environment {
         PYTHON = 'C:/Users/Qontrast77/AppData/Local/Programs/Python/Python312/python.exe'
-        DOCKER = 'C:/Program Files/Docker/Docker/resources/bin/docker.exe'
-        APP_PORT = '5000'
-        // TODO: replace with your own Docker Hub username/repo
-        IMAGE_NAME = 'qontrast77/library-cicd-lab'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        // Required for the Dockerfile's "RUN --mount=type=cache" to work -
-        // that syntax needs BuildKit, not the older classic builder.
-        DOCKER_BUILDKIT = '1'
-        COMPOSE_DOCKER_CLI_BUILD = '1'
+        // при необходимости укажите путь к kubeconfig пользователя:
+        // KUBECONFIG = 'C:/Users/Qontrast77/.kube/config'
     }
 
     stages {
@@ -42,43 +32,29 @@ pipeline {
             }
         }
 
-        stage('Test') {
+        stage('Build images') {
+            when { branch 'main' }
+            steps {
+                bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Tag %IMAGE_TAG%'
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            when { branch 'main' }
+            steps {
+                bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Tag %IMAGE_TAG%'
+            }
+        }
+
+        stage('Smoke test') {
+            when { branch 'main' }
             steps {
                 bat 'scripts/test.bat'
             }
             post {
                 always {
-                    junit 'reports/results.xml'
+                    junit allowEmptyResults: true, testResults: 'reports/results.xml'
                 }
-            }
-        }
-
-        stage('Build & Push image') {
-            // Builds a versioned Docker image (tagged with the Jenkins build
-            // number) and pushes it to Docker Hub for versioning/artifact
-            // storage purposes. Only on main.
-            when {
-                branch 'main'
-            }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKERHUB_USER',
-                    passwordVariable: 'DOCKERHUB_PASS'
-                )]) {
-                    bat 'scripts/build_push.bat'
-                }
-            }
-        }
-
-        stage('Deploy') {
-            // CD stage: only on main. (Re)starts the app plus nginx via
-            // docker-compose, reusing the image built in the previous stage.
-            when {
-                branch 'main'
-            }
-            steps {
-                bat 'scripts/deploy.bat'
             }
         }
     }
@@ -88,8 +64,8 @@ pipeline {
             echo "Pipeline finished OK for branch ${env.BRANCH_NAME}"
         }
         failure {
-            echo "Pipeline failed on branch ${env.BRANCH_NAME} - check test report"
+            echo "Pipeline failed on branch ${env.BRANCH_NAME} - check logs and smoke-test report"
+            bat(returnStatus: true, script: 'kubectl get pods -n library')
         }
     }
 }
-
