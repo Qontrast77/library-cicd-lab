@@ -1,7 +1,7 @@
 # Демонстрация самовосстановления. Порт-форвард должен быть запущен в другом окне:
-#   kubectl port-forward -n library svc/gateway 8080:80
+#   kubectl port-forward -n library svc/gateway 8081:80
 # В третьем окне: kubectl get pods -n library -w
-$B = "http://localhost:8080"
+$B = "http://localhost:8081"
 
 function Step($t) { Write-Host "`n=== $t ===" -ForegroundColor Cyan; Read-Host "Enter для запуска" | Out-Null }
 
@@ -12,7 +12,8 @@ Start-Sleep 5
 kubectl get pods -n library -l app=books-service
 
 Step "Сценарий 2: падение контейнера (перезапуск kubelet, растёт RESTARTS)"
-minikube ssh -- "docker ps -q --filter name=k8s_app_books | head -1 | xargs docker kill"
+$pod = kubectl get pods -n library -l app=books-service -o jsonpath="{.items[0].metadata.name}"
+minikube ssh -- "sudo crictl ps --label io.kubernetes.pod.name=$pod -q | xargs sudo crictl stop"
 Start-Sleep 5
 kubectl get pods -n library -l app=books-service
 
@@ -35,3 +36,4 @@ Invoke-RestMethod "$B/api/books"
 
 Write-Host "`nСобытия:" -ForegroundColor Cyan
 kubectl get events -n library --sort-by=.lastTimestamp | Select-Object -Last 20
+

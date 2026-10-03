@@ -1,13 +1,13 @@
 """
 Сквозной smoke-тест микросервисного приложения через API Gateway.
-Запуск: BASE_URL=http://localhost:8080 pytest tests/ --junitxml=reports/results.xml
+Запуск: BASE_URL=http://localhost:8081 pytest tests/ --junitxml=reports/results.xml
 """
 import os
 import unittest
 
 import requests
 
-BASE = os.environ.get("BASE_URL", "http://localhost:8080")
+BASE = os.environ.get("BASE_URL", "http://localhost:8081")
 T = 10
 
 
@@ -76,3 +76,4 @@ class LibrarySmokeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
