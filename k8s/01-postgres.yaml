@@ -38,29 +38,29 @@ spec:
       labels:
         app: postgres
     spec:
-      containers:
-        - name: postgres
-          image: postgres:16-alpine
-          ports:
-            - containerPort: 5432
-          envFrom:
-            - secretRef:
-                name: db-secret
-          env:
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
-            - name: init
-              mountPath: /docker-entrypoint-initdb.d
-          readinessProbe:
-            exec:
-              command: ["pg_isready", "-U", "library"]
-            periodSeconds: 5
-          resources:
-            requests: {cpu: 100m, memory: 128Mi}
-            limits: {memory: 512Mi}
+        containers:
+          - name: postgres
+            image: postgres:16-alpine
+            ports:
+              - containerPort: 5432
+            envFrom:
+              - secretRef:
+                  name: db-secret
+            env:
+              - name: PGDATA
+                value: /var/lib/postgresql/data/pgdata
+            volumeMounts:
+              - name: data
+                mountPath: /var/lib/postgresql/data
+              - name: init
+                mountPath: /docker-entrypoint-initdb.d
+            readinessProbe:
+              exec:
+                command: ["pg_isready", "-U", "library"]
+              periodSeconds: 5
+            resources:
+              requests: {cpu: 100m, memory: 128Mi}
+              limits: {memory: 512Mi}
       volumes:
         - name: init
           configMap:

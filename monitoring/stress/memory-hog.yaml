@@ -1,0 +1,32 @@
+# Стресс-тест по container_memory_working_set_bytes.
+# Под каждые 2 секунды занимает ещё 5 МиБ памяти. Лимит 150 МиБ, поэтому примерно через минуту
+# working set упирается в лимит, ядро убивает контейнер (OOMKilled), а Kubernetes его перезапускает.
+# Образ берём уже загруженный в minikube (library/books-service:v1, внутри есть python), из интернета ничего не тянется.
+# Попутно под жжёт CPU при лимите 100m, поэтому заодно видно container_cpu_cfs_throttled_seconds_total.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-hog
+  namespace: library
+  labels:
+    app: memory-hog
+spec:
+  restartPolicy: Always
+  containers:
+    - name: hog
+      image: library/books-service:v1
+      imagePullPolicy: Never
+      command: ["python", "-u", "-c"]
+      args:
+        - |
+          import time
+          data = []
+          while True:
+              data.append(b"x" * 5 * 1024 * 1024)   # +5 MiB реально занятой памяти
+              print(f"allocated {len(data) * 5} MiB", flush=True)
+              t = time.time()
+              while time.time() - t < 2:            # 2 секунды крутим CPU
+                  pass
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {cpu: 100m, memory: 150Mi}

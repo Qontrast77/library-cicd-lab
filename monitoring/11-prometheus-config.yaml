@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/alerts.yml
+
+    scrape_configs:
+      # 1. Prometheus мониторит сам себя
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # 2. node-exporter: метрики узла (CPU, RAM, диск, сеть узла)
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces: {names: [monitoring]}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: node-exporter
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+
+      # 3. cAdvisor: метрики контейнеров (container_cpu_*, container_memory_*, container_network_*)
+      - job_name: cadvisor
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces: {names: [monitoring]}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: cadvisor
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+        metric_relabel_configs:
+          # cAdvisor отдаёт имена пода/контейнера как метки containerd —
+          # переименовываем их в привычные namespace / pod / container
+          - source_labels: [container_label_io_kubernetes_pod_namespace]
+            target_label: namespace
+          - source_labels: [container_label_io_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [container_label_io_kubernetes_container_name]
+            target_label: container
+          - regex: container_label_.*
+            action: labeldrop
+
+  alerts.yml: |
+    groups:
+      - name: memory
+        rules:
+          - alert: PodMemoryNearLimit
+            expr: |
+              container_memory_working_set_bytes{container!=""}
+                / (container_spec_memory_limit_bytes{container!=""} > 0) > 0.8
+            for: 15s
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.namespace }}/{{ $labels.pod }} использует больше 80% лимита памяти"
