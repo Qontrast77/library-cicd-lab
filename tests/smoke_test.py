@@ -73,6 +73,13 @@ class LibrarySmokeTest(unittest.TestCase):
         r = post("/api/loans", book_id=book["id"], member_id=999999)
         self.assertEqual(r.status_code, 400)
 
+    def test_genre_service_available(self):
+        # ЛР №5: genre-service отвечает через gateway (модель может быть ещё не обучена)
+        r = requests.get(f"{BASE}/api/genre/model", timeout=T)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("loaded", r.json())
+
+
 
 if __name__ == "__main__":
     unittest.main()

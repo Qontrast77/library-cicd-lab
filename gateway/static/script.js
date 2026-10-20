@@ -50,3 +50,28 @@ bindForm("member-form", "members");
 bindForm("loan-form", "loans", d => ({ book_id: Number(d.book_id), member_id: Number(d.member_id) }));
 
 refreshAll();
+
+// ---- ЛР №5: определение жанра через genre-service (модель из MLflow) ----
+async function refreshModelInfo() {
+  const el = document.getElementById("genre-model");
+  try {
+    const m = await api("genre/model");
+    el.textContent = m.loaded ? `Модель: ${m.model} v${m.version} (@${m.alias})` : "Модель ещё не обучена";
+  } catch { el.textContent = "genre-service недоступен"; }
+}
+
+document.getElementById("genre-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const out = document.getElementById("genre-result");
+  const data = Object.fromEntries(new FormData(e.target).entries());
+  out.textContent = "...";
+  try {
+    const r = await api("genre/predict", { method: "POST", body: JSON.stringify(data) });
+    out.textContent = r.error ? r.error
+      : `${r.genre} (${Math.round(r.confidence * 100)}%) · ` +
+        r.top3.slice(1).map(t => `${t.genre} ${Math.round(t.p * 100)}%`).join(", ");
+  } catch { out.textContent = "genre-service недоступен"; }
+  refreshModelInfo();
+});
+
+refreshModelInfo();

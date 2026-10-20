@@ -27,7 +27,6 @@ spec:
             # оставляем только метки, нужные для namespace/pod/container
             - --store_container_labels=false
             - --whitelisted_container_labels=io.kubernetes.container.name,io.kubernetes.pod.name,io.kubernetes.pod.namespace
-            # отключаем лишние группы метрик, чтобы не грузить ноут
             - --disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl,process,advtcp,memory_numa,cpuset
           securityContext:
             privileged: true

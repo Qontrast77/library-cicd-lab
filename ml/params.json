@@ -1,0 +1,16 @@
+{
+  "description": "Сетка гиперпараметров. train.py перебирает все комбинации grid, fixed добавляется к каждой.",
+  "fixed": {
+    "ngram_range": [1, 2],
+    "min_df": 2,
+    "learning_rate_init": 0.001,
+    "batch_size": 64,
+    "max_iter": 40,
+    "random_state": 42
+  },
+  "grid": {
+    "max_features": [5000, 20000],
+    "hidden_layer_sizes": [[128], [256, 64]],
+    "alpha": [0.0001, 0.001]
+  }
+}

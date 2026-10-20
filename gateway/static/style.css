@@ -9,3 +9,6 @@ button:hover { background: #303f9f; }
 ul { list-style: none; padding: 0; max-height: 240px; overflow-y: auto; }
 li { padding: 0.4rem 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
 li button { background: #e53935; padding: 0.2rem 0.5rem; font-size: 0.8rem; }
+textarea { padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; font: inherit; resize: vertical; }
+.wide { grid-column: 1 / -1; }
+.genre-result { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; min-height: 1.4em; }

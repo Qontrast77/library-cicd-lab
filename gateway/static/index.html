@@ -50,8 +50,18 @@
       </form>
       <ul id="loan-list"></ul>
     </section>
+    <section class="wide">
+      <h2>Определить жанр (ML)</h2>
+      <form id="genre-form">
+        <input name="title" placeholder="Название книги">
+        <textarea name="summary" rows="4" placeholder="Аннотация на английском языке" required></textarea>
+        <button type="submit">Определить</button>
+      </form>
+      <div id="genre-result" class="genre-result"></div>
+      <small id="genre-model"></small>
+    </section>
   </div>
 
-  <script src="/static/script.js"></script>
+  <script src="/script.js"></script>
 </body>
 </html>

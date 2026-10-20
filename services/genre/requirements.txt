@@ -1,0 +1,8 @@
+# Те же версии, что в ml/requirements.txt: модель сериализуется pickle и должна
+# загружаться той же версией scikit-learn, которой обучалась
+Flask==3.0.3
+waitress==3.0.0
+mlflow-skinny==2.17.2
+scikit-learn==1.5.2
+pandas==2.2.3
+numpy==1.26.4

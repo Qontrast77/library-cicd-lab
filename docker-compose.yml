@@ -1,0 +1,105 @@
+# ЛР №5: микросервисная система из ЛР №3 без Kubernetes + сервер MLflow + genre-service.
+#   docker compose up -d --build
+#   Приложение:  http://localhost:8081      MLflow UI:  http://localhost:5000
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_USER: library
+  DB_PASSWORD: library_pass
+  AUTHORS_URL: http://authors-service:5000
+  BOOKS_URL: http://books-service:5000
+  MEMBERS_URL: http://members-service:5000
+
+x-service: &service
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: library
+      POSTGRES_PASSWORD: library_pass
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./compose/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "library"]
+      interval: 5s
+      retries: 20
+
+  authors-service:
+    <<: *service
+    build: {context: services, args: {SERVICE: authors}}
+    image: library/authors-service:compose
+    environment: {<<: *db-env, DB_NAME: authors}
+
+  books-service:
+    <<: *service
+    build: {context: services, args: {SERVICE: books}}
+    image: library/books-service:compose
+    environment: {<<: *db-env, DB_NAME: books}
+
+  members-service:
+    <<: *service
+    build: {context: services, args: {SERVICE: members}}
+    image: library/members-service:compose
+    environment: {<<: *db-env, DB_NAME: members}
+
+  loans-service:
+    <<: *service
+    build: {context: services, args: {SERVICE: loans}}
+    image: library/loans-service:compose
+    environment: {<<: *db-env, DB_NAME: loans}
+
+  # ---------- MLOps ----------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.2
+    restart: unless-stopped
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --serve-artifacts
+      --host 0.0.0.0 --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      retries: 30
+
+  genre-service:
+    build: services/genre
+    image: library/genre-service:compose
+    restart: unless-stopped
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_NAME: book-genre-classifier
+      MODEL_ALIAS: champion
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
+  gateway:
+    build: gateway
+    image: library/gateway:compose
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ./gateway/compose.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - authors-service
+      - books-service
+      - members-service
+      - loans-service
+      - genre-service
+
+volumes:
+  pg-data:
+  mlflow-data:
