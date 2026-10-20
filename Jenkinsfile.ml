@@ -34,6 +34,8 @@ pipeline {
         MLFLOW_EXPERIMENT = 'book-genre'
         MODEL_NAME = 'book-genre-classifier'
         GATEWAY_URL = 'http://localhost:8081'
+        PYTHONUNBUFFERED = '1'       // вывод Python сразу попадает в лог сборки
+        GIT_PYTHON_REFRESH = 'quiet' // mlflow не ищет git в PATH службы Jenkins
     }
 
     stages {

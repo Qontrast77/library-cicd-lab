@@ -25,7 +25,8 @@ class ModelQualityError(Exception):
 
 def evaluate(uri, X, y):
     pred = mlflow.sklearn.load_model(uri).predict(X)
-    return {"f1_macro": f1_score(y, pred, average="macro"), "accuracy": accuracy_score(y, pred)}
+    # float(): sklearn возвращает numpy-типы, а json не умеет их сохранять
+    return {"f1_macro": float(f1_score(y, pred, average="macro")), "accuracy": float(accuracy_score(y, pred))}
 
 
 def main():
@@ -58,7 +59,7 @@ def main():
     else:
         print("Рабочей модели ещё нет - новая модель будет назначена первой.")
 
-    passed = old is None or new["f1_macro"] >= old["f1_macro"] - a.min_delta
+    passed = bool(old is None or new["f1_macro"] >= old["f1_macro"] - a.min_delta)
     result = {"candidate_version": version, "candidate": new,
               "champion_version": str(champ.version) if champ else None, "champion": old,
               "min_delta": a.min_delta, "passed": passed}
