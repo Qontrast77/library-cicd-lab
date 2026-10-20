@@ -36,6 +36,7 @@ pipeline {
         GATEWAY_URL = 'http://localhost:8081'
         PYTHONUNBUFFERED = '1'       // вывод Python сразу попадает в лог сборки
         GIT_PYTHON_REFRESH = 'quiet' // mlflow не ищет git в PATH службы Jenkins
+        PYTHONIOENCODING = 'utf-8'   // русский текст в логе Jenkins (лог читается как UTF-8)
     }
 
     stages {
