@@ -74,7 +74,7 @@ pipeline {
 
                 stage('Check MLflow') {
                     steps {
-                        bat '''powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing %MLFLOW_TRACKING_URI%/health | Out-Null; Write-Host 'MLflow OK' } catch { Write-Host 'MLflow is not available at %MLFLOW_TRACKING_URI%. Run: docker compose up -d mlflow'; exit 1 }"'''
+                        bat '%PY% -c "import urllib.request, os; u = os.environ[\'MLFLOW_TRACKING_URI\']; urllib.request.urlopen(u + \'/health\', timeout=10); print(\'MLflow OK:\', u)"'
                     }
                 }
 
@@ -102,7 +102,7 @@ pipeline {
                 stage('Deploy model') {
                     steps {
                         catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                            bat 'powershell -NoProfile -Command "Invoke-RestMethod -Method Post %GATEWAY_URL%/api/genre/reload | ConvertTo-Json"'
+                            bat '%PY% -c "import urllib.request, os; r = urllib.request.urlopen(urllib.request.Request(os.environ[\'GATEWAY_URL\'] + \'/api/genre/reload\', method=\'POST\'), timeout=120); print(r.read().decode())"'
                         }
                     }
                 }

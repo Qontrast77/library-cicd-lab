@@ -10,6 +10,7 @@
 import os
 import socket
 import threading
+import time
 
 import mlflow
 import mlflow.sklearn
@@ -24,16 +25,29 @@ ALIAS = os.environ.get("MODEL_ALIAS", "champion")
 mlflow.set_tracking_uri(MLFLOW_URI)
 app = Flask(__name__)
 _lock = threading.Lock()
-state = {"model": None, "version": None, "error": None}
+state = {"model": None, "version": None, "error": None, "failed_at": 0.0}
+_load_lock = threading.Lock()   # модель скачивается из MLflow только одним потоком
+RETRY_AFTER = 15                # пауза (с) перед повторной попыткой после неудачи
 
 
-def load_model():
-    """Загружает champion; при недоступности MLflow запоминает ошибку, а не падает."""
+def load_model(wait=True):
+    """Загружает champion. Одновременно идёт только одна загрузка: остальные запросы
+    ждут её (wait=True) или сразу получают ответ "модель загружается" (wait=False)."""
+    if not _load_lock.acquire(blocking=wait):
+        return False
+    try:
+        return _load()
+    finally:
+        _load_lock.release()
+
+
+def _load():
     try:
         mv = MlflowClient().get_model_version_by_alias(MODEL_NAME, ALIAS)
         model = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}/{mv.version}")
     except Exception as e:  # модели ещё нет или MLflow не запущен
-        state["error"] = f"{type(e).__name__}: {e}"
+        state["error"] = f"{type(e).__name__}: {e}"[:500]
+        state["failed_at"] = time.time()
         app.logger.warning("model is not loaded: %s", state["error"])
         return False
     with _lock:
@@ -44,8 +58,10 @@ def load_model():
 
 
 def ensure_model():
-    if state["model"] is None:
-        load_model()
+    """Для обычных запросов: если модели нет - одна попытка загрузки в фоне запроса,
+    без очереди и не чаще раза в RETRY_AFTER секунд."""
+    if state["model"] is None and time.time() - state["failed_at"] > RETRY_AFTER:
+        load_model(wait=False)
     return state["model"] is not None
 
 
@@ -82,7 +98,7 @@ def predict():
     if not text:
         return jsonify(error="нужно передать title и/или summary"), 400
     if not ensure_model():
-        return jsonify(error="модель ещё не обучена или MLflow недоступен", detail=state["error"]), 503
+        return jsonify(error="модель ещё не загружена (не обучена, загружается или MLflow недоступен)", detail=state["error"]), 503
     with _lock:
         model, version = state["model"], state["version"]
     X = pd.DataFrame({"text": [text]})
