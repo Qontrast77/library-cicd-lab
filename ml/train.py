@@ -133,6 +133,12 @@ def main():
                          "matrix": confusion_matrix(test["genre"], pred, labels=labels).tolist()},
                         "eval/confusion_matrix.json")
 
+        # stop_words_ - список всех отброшенных токенов (сотни тысяч при ngram (1,2)),
+        # для предсказаний не нужен; без него model.pkl меньше в разы
+        tfidf = model.named_steps["features"].named_transformers_["tfidf"]
+        if hasattr(tfidf, "stop_words_"):
+            delattr(tfidf, "stop_words_")
+
         example = X_test.head(3)
         info = mlflow.sklearn.log_model(model, artifact_path="model", input_example=example,
                                         signature=infer_signature(example, model.predict(example)))

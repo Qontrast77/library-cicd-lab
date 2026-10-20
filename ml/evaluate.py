@@ -8,6 +8,7 @@
 Запуск: python ml/evaluate.py [--min-delta 0.0]
 """
 import argparse
+import time
 
 import mlflow
 import mlflow.sklearn
@@ -23,8 +24,20 @@ class ModelQualityError(Exception):
     """Новая модель работает хуже предыдущей."""
 
 
+def load(uri, attempts=3):
+    """Загрузка модели из MLflow с повтором: большой model.pkl иногда обрывается."""
+    for i in range(1, attempts + 1):
+        try:
+            return mlflow.sklearn.load_model(uri)
+        except MlflowException as e:
+            if i == attempts:
+                raise
+            print(f"Загрузка {uri} не удалась (попытка {i}): {str(e)[:120]}... повтор через 5 с")
+            time.sleep(5)
+
+
 def evaluate(uri, X, y):
-    pred = mlflow.sklearn.load_model(uri).predict(X)
+    pred = load(uri).predict(X)
     # float(): sklearn возвращает numpy-типы, а json не умеет их сохранять
     return {"f1_macro": float(f1_score(y, pred, average="macro")), "accuracy": float(accuracy_score(y, pred))}
 
